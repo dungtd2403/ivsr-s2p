@@ -192,7 +192,46 @@ class Kitti3DPredictor(BackboneSharedParameterizedNet):
         x_asim, y_asim, z_asim, out_1 = super().call(inputs)
         x_cam, y_cam, z_cam = self.frame_converter(x_asim, y_asim, z_asim)
         return x_cam, y_cam, z_cam, out_1
+class BackboneandPredictionHead(tf.keras.Model):
+    def __init__(self, activation='relu', input_shape=(224, 398, 1), num_ext_conv=0, ksize=3, num_params=3):
+        super().__init__()
+        self.activation = activation
+        self.num_ext_conv = num_ext_conv
+        self.ksize = ksize
+        self.backbone1 = BackBone(activation, input_shape, num_ext_conv, ksize)
+        self.flatten1 = tf.keras.layers.Flatten()
 
+        self.dense1 = Dense(128, activation=self.activation, name='dense1')
+        self.dense2 = Dense(128, activation=self.activation, name='dense2')
+        self.dense3 = Dense(3, name='dense3')
+        self.dense4 = Dense(3, name='dense4')
+        self.parameterized_layer = tf.keras.layers.Activation('softmax')
+        self.prediction_head = PredictionHead()
+
+    def call(self, inputs, training=None, mask=None):
+        out_1 = self.backbone1(inputs)
+        flattened = self.flatten1(out_1)
+
+        out_1 = self.dense1(flattened)
+        out_1 = self.dense3(out_1)
+        # out_1 = self.parameterized_layer(out_1)
+
+        # out_2 = self.dense2(flattened)
+        # out_2 = tf.concat([out_1, out_2], axis=-1)
+        # out_2 = self.dense4(out_2)
+
+        x, y, z = self.prediction_head(out_1)
+
+        return x, y, z
+
+class Kitti3DBP(BackboneandPredictionHead):
+    def __init__(self,  activation='relu', input_shape=(224, 398, 1), num_ext_conv=0, ksize=3, num_params=3):
+        super().__init__(activation, input_shape, num_ext_conv, ksize, num_params)
+        self.frame_converter = FrameConverter()
+    def call(self, inputs, training=None, mask=None):
+        x_asim, y_asim, z_asim = super().call(inputs)
+        x_cam, y_cam, z_cam = self.frame_converter(x_asim, y_asim, z_asim)
+        return x_cam, y_cam, z_cam
 class DepthAwareNet(tf.keras.Model):
     def __init__(self, activation='relu',input_shape=(224,398,1), num_ext_conv = 0, ksize=3):
         super().__init__()
